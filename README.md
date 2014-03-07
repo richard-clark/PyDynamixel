@@ -12,7 +12,7 @@ This library contains two modules:
 The following example turns on the red LED of a servo with id 1 located (on a POSIX-
 compliant system) at `/dev/tty.usbserial-A9C73L15`:
 
-	    import dynamixel
+	    from pydynamixel import dynamixel
 	
 	    try:
 	        url = '/dev/tty.usbserial-A9C73L15'
