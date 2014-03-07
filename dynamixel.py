@@ -3,7 +3,7 @@
 PyDynamixel
 ***********
 
-Provides functionality for controlling Dynamixel servos. 
+A Python library for controlling Dynamixel servos.
 
 Communication
 -------------
