@@ -9,6 +9,11 @@ This library contains two modules:
 
 ## Examples
 
+A number of example files are provided:
+
+* `display_position` will read and display the current position of the all of the selected joints using the `chain` module.
+* `grip` demonstrates how the current torque provided by the motor can be read and used to implement touch feedback. 
+
 The following example turns on the red LED of a servo with id 1 located (on a POSIX-
 compliant system) at `/dev/tty.usbserial-A9C73L15`:
 
