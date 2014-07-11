@@ -507,5 +507,5 @@ def send_action_packet(ser):
 def get_is_moving(ser, servo_id, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
     packet = get_read_packet(servo_id, 0x2E, 2)
     resp = write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
-    return resp.data[0] == 0
+    return resp.data[0] != 0
     

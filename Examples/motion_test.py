@@ -1,3 +1,7 @@
+"""
+This example simply moves a specified servo to a specified position. 
+"""
+
 from pydynamixel import dynamixel
 
 # You'll need to change this to the serial port of your USB2Dynamixel

@@ -1,3 +1,8 @@
+"""
+The following code can be used to turn on the LED on a connected servo 
+(on a POSIX-compliant platform.)
+"""
+
 from pydynamixel import dynamixel
 
 # You'll need to change this to the serial port of your USB2Dynamixel
