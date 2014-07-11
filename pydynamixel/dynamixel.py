@@ -11,18 +11,15 @@ Communication
 Communication between Python and Dynamixel servos occurs using the Python
 ``serial`` library. Data is exchanged using packets.
 
-
 The helper method :func:`flush_serial` is used to clear any pending data from
 the receive buffer.
 
 The :func:`get_serial_for_url` method can be used to get a ``serial`` object correctly
 configured for the specified url.
 
-By default, Dynamixels communicate at 1,000,000 baud. Further, the Dynamixels communicate
-using a single-wire protocol. For these reasons, communication between the computer and the
-Dynamixel can be very prone to errors.
-
-The :func:`write_and_get_response_multiple` function is recommended as the preferred way 
+By defualt, Dynamixels comminicate at a high baud rate (1,000,000 baud), and use a single-wire
+protocol. This combination is highly susceptible to noise. For this reason, the 
+:func:`write_and_get_response_multiple` function is recommended as the preferred way 
 of communicating with the Dynamixel. This function will make multiple attempts to clear
 the serial port, send the packet, and read a valid response packet before failing.
 
@@ -72,6 +69,8 @@ import struct
 NUM_ERROR_ATTEMPTS = 10
 SLEEP_TIME = 0.1
 VERBOSE = True
+
+BROADCAST = 254
 
 BAUDRATE = 1000000
 TIMEOUT = 0.1
@@ -399,7 +398,7 @@ def get_response(ser):
     last_byte = None
     while True:
         data = ser.read()
-        if data == None:
+        if data == '':
             raise Exception('Unable to read response header.')
         data_byte = struct.unpack('B', data)[0]
         if data_byte == 0xFF and last_byte == 0xFF:
@@ -407,19 +406,19 @@ def get_response(ser):
         last_byte = data_byte
         
     id_str = ser.read()
-    if id_str == None:
+    if id_str == '':
         raise Exception('Unable to read response id.')
     id = struct.unpack('B', id_str)[0]
     sum += id
     
     length_str = ser.read()
-    if length_str == None:
+    if length_str == '':
         raise Exception('Unable to read length.')
     length = struct.unpack('B', length_str)[0]
     sum += length
     
     error_str = ser.read()
-    if error_str == None:
+    if error_str == '':
         raise Exception('Unable to read error.')
     error = struct.unpack('B', error_str)[0]
     sum += error
@@ -496,4 +495,41 @@ def write_and_get_response_multiple(ser, packet, servo_id = None, verbose = VERB
             
     raise Exception('Unable to read response for servo {0}'.format(servo_id))
    
+LED_ON = 1
+LED_OFF = 0
+   
+def set_led(ser, servo_id, value, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
+    packet = get_led_packet(servo_id, value)
+    write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
+   
+def get_torque(ser, servo_id, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
+    torque_packet = get_read_packet(servo_id, 0x28, 2)
+    resp = write_and_get_response_multiple(ser, torque_packet, servo_id, verbose, num_error_attempts)
+    return resp.data[1] * 256 + resp.data[0]
+
+def get_position(ser, servo_id, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
+    packet = get_read_packet(servo_id, 0x24, 2)
+    resp = write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
+    return resp.data[1] * 256 + resp.data[0]
+
+def set_position(ser, servo_id, position, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
+    packet = get_write_packet_2b(servo_id, 0x1E, position)
+    write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
+
+def set_velocity(ser, servo_id, velocity, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
+    packet = get_write_packet_2b(servo_id, 0x20, velocity)
+    write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
+
+def init(ser, servo_id, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
+    position = get_position(ser, servo_id, verbose, num_error_attempts)
+    set_position(ser, servo_id, position, verbose, num_error_attempts)
+    ser.write(get_action_packet())
+    
+def send_action_packet(ser):
+    ser.write(get_action_packet())
+
+def get_is_moving(ser, servo_id, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
+    packet = get_read_packet(servo_id, 0x2E, 2)
+    resp = write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
+    return resp.data[0] == 0
     
