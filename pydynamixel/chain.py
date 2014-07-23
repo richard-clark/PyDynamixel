@@ -158,3 +158,26 @@ def make_vector(position, joints, velocity):
         vector.append((joints[i], position[i], velocity))
         
     return vector
+
+def init(ser, joints, velocity, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
+    """
+    Read the current position of the servos and then set that position. Used to mitigate issues
+    with the servos moving abrubtly when first powered on.
+    
+    :param ser: The ``serial`` object to use. 
+    :param joints: A list of servo IDs.
+    :param velocity: The velocity at which to move all joint.
+    :param verbose: If True, status information will be printed. (Default: ``VERBOSE``).
+    :param num_error_attempts: The number of attempts to make to send the packet when an error is encountered. (Default: ``NUM_ERROR_ATTEMPTS``.)
+    
+    :returns: A vector which corresponds to the initial positions of the joints. 
+    
+    """
+    
+    init_pos = read_position(ser, joints, verbose, num_error_attempts)
+    vector = make_vector(init_pos, joints, velocity)
+    move_to_vector(ser, vector, verbose, num_error_attempts)
+    wait_for_move(ser, joints, verbose, num_error_attempts)
+    
+    return vector
+    
