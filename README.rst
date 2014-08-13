@@ -1,36 +1,38 @@
-
-PyDynamixel
-===========
-
 A Python library for controlling Dynamixel servos.
 
 Installation
-------------
+============
 
 This package requires pyserial, whicah can be installed using:
+
+::
 
 	pip install pyserial
 	
 or, using another method described on the documentation page:
 
 	http://pythonhosted.org//pyserial/pyserial.html#installation
-	
-This package is available on the Python Package index:
 
-	https://pypi.python.org/pypi/pydynamixel
-	
-and can be installed using
+The PyDynamixel package itself can be installed using pip:
 
-	pip install pydynamixel
-	
+::
+
+	pip install pydynamixel 
+
+The source code (with examples) is available from the GitHub repository:
+
+	https://github.com/richard-clark/pydynamixel
+
 It can also be installed by cloning into the source and running ``setup.py``:
+	
+::
 	
 	git clone https://github.com/richard-clark/pydynamixel
 	cd pydynamixel
 	python setup.py install
 
 Communication
--------------
+=============
 
 The ``get_serial_for_url`` method can be used to get a ``serial`` object correctly
 configured for the specified url (on POSIX systems; Windows users can use
@@ -43,7 +45,7 @@ with the Dynamixel. This function will make multiple arguments to clear the seri
 packet, and read a valid response before failing.
 
 Servo Initialization
---------------------
+====================
 
 The first time that a servo is instructed to move to a specified position after it has been 
 powered up, it will do so at the maximum speed possible, regardless of whether the velocity 
@@ -53,11 +55,13 @@ This issue can be mitigated by first reading the current position of the servo, 
 commanding the servo to move to that same position. The ``init()`` method performs this function.
 
 Basic LED Example
------------------
+=================
 
 The AX-18A servos have integrated LEDs. By default, these LEDs are off. The following code 
 can be used to turn on the LED on a connected servo (on POSIX-compliant platforms, 
 such as Linux and OSX). 
+
+::
 
     from pydynamixel import dynamixel, registers
 
@@ -80,6 +84,8 @@ such as Linux and OSX).
         
 To perform the same function on Windows, use the following:
 
+::
+
     from pydynamixel import dynamixel, registers
 
     # You'll need to change this to the serial port of your USB2Dynamixel
@@ -100,9 +106,11 @@ To perform the same function on Windows, use the following:
         print(e)
         
 Motion Example
---------------
+==============
 
 This example simply moves a specified servo to a specified position.
+
+::
 
     from pydynamixel import dynamixel
 
@@ -135,7 +143,7 @@ This example simply moves a specified servo to a specified position.
        
 
 Chain Module
-------------
+============
 
 Multiple servos can be controlled more easily using the chain module.
 
@@ -145,6 +153,8 @@ in ``pos`` contains a list of positions, each one corresponding with a
 servo id. After instructing each joint to move to the specified position,
 the program waits until alls ervos have finished moving before moving to the
 next frame.
+
+::
 
     from pydynamixel import chain, dynamixel
 
@@ -186,7 +196,7 @@ Fore each vector, after instructing the joints to move to the specified position
 the program waits until all servos have finished moving before moving to the next frame.
 
 Further Documentation
----------------------
+=====================
 
 For further documentation, see
 

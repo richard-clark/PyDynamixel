@@ -1,7 +1,7 @@
 """
 
 PyDynamixel
-***********
+===========
 
 A Python library for controlling Dynamixel servos.
 
@@ -11,44 +11,128 @@ Communication
 Communication between Python and Dynamixel servos occurs using the Python
 ``serial`` library. Data is exchanged using packets.
 
-The helper method :func:`flush_serial` is used to clear any pending data from
-the receive buffer.
+The ``get_serial_for_url`` method can be used to get a ``serial`` object correctly
+configured for the specified url (on POSIX systems; Windows users can use
+``get_serial_for_com``).
 
-The :func:`get_serial_for_url` method can be used to get a ``serial`` object correctly
-configured for the specified url.
+By default, Dynamixels comminate at a high baud rate (1,000,000 baud), and use a single-wire
+protocol. This combination is highly susceptible to noise. For this reason, the
+``write_and_get_response`` multiple function is recommended as the preferred way of commincating
+with the Dynamixel. This function will make multiple arguments to clear the serial port, send the
+packet, and read a valid response before failing.
 
-By defualt, Dynamixels comminicate at a high baud rate (1,000,000 baud), and use a single-wire
-protocol. This combination is highly susceptible to noise. For this reason, the 
-:func:`write_and_get_response_multiple` function is recommended as the preferred way 
-of communicating with the Dynamixel. This function will make multiple attempts to clear
-the serial port, send the packet, and read a valid response packet before failing.
+Servo Initialization [initialization]
+-------------------------------------
 
-Packets
--------
+The first time that a servo is instructed to move to a specified position after it has been 
+powered up, it will do so at the maximum speed possible, regardless of whether the velocity 
+has been set. This is dangerous, as the servos are quite powerful.
 
-Data is exchaned between the computer and the servo using packets. 
+This issue can be mitigated by first reading the current position of the servo, and then 
+commanding the servo to move to that same position. The ``init()`` method performs this function.
 
-All packets have the following format:
+Basic LED Example
+-----------------
 
-    [0xFF] [0xFF] [data1] [data2] ... [dataN] [checksum]
+The AX-18A servos have integrated LEDs. By default, these LEDs are off. The following code 
+can be used to turn on the LED on a connected servo (on POSIX-compliant platforms, 
+such as Linux and OSX). 
+
+    from pydynamixel import dynamixel, registers
+
+    # You'll need to change this to the serial port of your USB2Dynamixel
+    serial_port = '/dev/tty.usbserial-A921X77J'
+
+    # You'll need to change this to the ID of your servo
+    servo_id = 9
+
+    # Turn the LED on
+    led_value = dynamixel.registers.LED_STATE.ON
     
-where ``checksum`` is the complement of the lowest byte of the sum of the data bytes.
+    try:
+        ser = dynamixel.get_serial_for_url(serial_port)
+        dynamixel.set_led(ser, servo_id, led_value)
+        print('LED set successfully!')
+    except Exception as e:
+        print('Unable to set LED.')
+        print(e)
+        
+To perform the same function on Windows, use the following:
 
-A number of methods are provided for handling packets.
+    from pydynamixel import dynamixel, registers
 
+    # You'll need to change this to the serial port of your USB2Dynamixel
+    com_port = 'COM5'
+
+    # You'll need to change this to the ID of your servo
+    servo_id = 9
+
+    # Turn the LED on
+    led_value = dynamixel.registers.LED_STATE.ON
+    
+    try:
+        ser = dynamixel.get_serial_for_url(serial_port)
+        dynamixel.set_led(ser, servo_id, led_value)
+        print('LED set successfully!')
+    except Exception as e:
+        print('Unable to set LED.')
+        print(e)
+        
+        
+        
+Motion Example
+--------------
+
+This example simply moves a specified servo to a specified position.
+
+    from pydynamixel import dynamixel
+
+    # You'll need to change this to the serial port of your USB2Dynamixel
+    serial_port = '/dev/tty.usbserial-A921X77J'
+
+    # You'll need to modify these for your setup
+    servo_id = 9
+    target_position = 768 # (range: 0 to 1023)
+
+    # If this is the first time the robot was powered on, 
+    # you'll need to read and set the current position.
+    # (See the documentation above.)
+    first_move = True
+
+    try:
+        ser = dynamixel.get_serial_for_url(serial_port)
+    
+        if first_move == True:
+            dynamixel.init(ser, servo_id)
+    
+        dynamixel.set_position(ser, servo_id, target_position)
+        dynamixel.send_action_packet(ser)
+    
+        print('Success!')
+    
+    except Exception as e:
+        print('Unable to move to desired position.')
+        print(e)
 
 """
 
 import serial
 import struct
+import registers
+import packets
 
+# The number of times to attempt to send a packet before raising an Exception.
 NUM_ERROR_ATTEMPTS = 10
-SLEEP_TIME = 0.1
+
 VERBOSE = True
 
+# The ID to use to broadcast to all servos.
 BROADCAST = 254
 
+# The default baudrate of the serial interface.
 BAUDRATE = 1000000
+
+# The default timeout to use when reading from the serial interface.
 TIMEOUT = 0.1
 
 ### Serial Helper Functions
@@ -99,14 +183,6 @@ def flush_serial(ser):
 
 ### Response Packet Handling
 
-ERROR_INSTRUCTION = 0x40
-ERROR_OVERLOAD = 0x20
-ERROR_SEND_CHECKSUM = 0x10
-ERROR_RANGE = 0x08
-ERROR_OVERHEATING = 0x04
-ERROR_ANGLE_LIMIT = 0x02
-ERROR_INPUT_VOLTAGE = 0x01
-
 def get_error_string(error):
     """ 
     Get a string to describe a Dynamixel error.
@@ -118,19 +194,19 @@ def get_error_string(error):
     """
     errors = []
     
-    if error & ERROR_INPUT_VOLTAGE > 0:
+    if error & registers.ERROR_BIT_MASKS.INPUT_VOLTAGE > 0:
         errors.append('input voltage error')
-    elif error & ERROR_ANGLE_LIMIT > 0:
+    elif error & registers.ERROR_BIT_MASKS.ANGLE_LIMIT > 0:
         errors.append('angle limit error')
-    elif error & ERROR_OVERHEATING > 0:
+    elif error & registers.ERROR_BIT_MASKS.OVERHEATING > 0:
         errors.append('motor overheating')
-    elif error & ERROR_RANGE > 0:
+    elif error & registers.ERROR_BIT_MASKS.RANGE > 0:
         errors.append('range error')
-    elif error & ERROR_SEND_CHECKSUM > 0:
+    elif error & registers.ERROR_BIT_MASKS.SEND_CHECKSUM > 0:
         errors.append('checksum mismatch')
-    elif error & ERROR_OVERLOAD > 0:
+    elif error & registers.ERROR_BIT_MASKS.OVERLOAD > 0:
         errors.append('motor overloaded')
-    elif error & ERROR_INSTRUCTION > 0:
+    elif error & registers.ERROR_BIT_MASKS.INSTRUCTION > 0:
         errors.append('instruction error')
     
     if len(errors) == 0:
@@ -147,7 +223,6 @@ def get_error_string(error):
     
         return s
     
-
 class DynamixelFatalError(Exception):
     def __init__(self, value):
         self.value = value
@@ -156,7 +231,7 @@ class DynamixelFatalError(Exception):
         return self.value
 
 def get_exception(error_code):
-    if error_code == ERROR_SEND_CHECKSUM:
+    if error_code == registers.ERROR_BIT_MASKS.SEND_CHECKSUM:
         return Exception('Send checksum mismatch.')
     else:
         return DynamixelFatalError(get_error_string(error_code))
@@ -196,161 +271,6 @@ class Response:
             return 'Checksum mismatch.'
         else:
             return None
-        
-### Packet-Formatting Functions
-
-def get_packet(bytes_in):
-    """
-    Get a properly formatted Dynamixel packet with header and checksum. 
-    
-    :param bytes_in: A list of bytes in the form ``[b0, b1, b2, ..., bn]``
-        
-    :returns: A packet in the form of a list of bytes.
-    """
-    bytes = [0xFF, 0xFF] + bytes_in
-
-    sum = 0
-    
-    for i in range(2,len(bytes)):
-        b = bytes[i]
-        sum += b
-    
-    sum = (~sum) & 0xFF
-    bytes.append(sum)
-    
-    return bytes
-
-def get_position_packet(id, angle):
-    """
-    Get a packet to set the position of a servo. 
-    
-    An action packet must be sent to actually move the servo.
-    
-    :param id: The id of the servo. 
-    :param angle: The angle to which to set the servo. 
-    :returns: A packet, in the form of a list of bytes. 
-    
-    """
-
-    angle_msb = (angle >> 8) & 0xFF
-    angle_lsb = angle & 0xFF
-    
-    bytes = [id, 0x05, 0x04, 0x1E, angle_lsb, angle_msb]
-    packet = get_packet(bytes)
-    return packet
-
-def get_velocity_packet(id, angular_velocity):
-    """
-    Get a packet to set the position of a servo. 
-    
-    An action packet must be sent to actually move the servo.
-    
-    :param id: The id of the servo. 
-    :param velocity: The velocity at which to move the servo. 
-        
-    :returns: A packet, in the form of a list of bytes. 
-    
-    """
-    
-    vel_msb = (angular_velocity >> 8) & 0xFF
-    vel_lsb = angular_velocity & 0xFF
-    
-    bytes = [id, 0x05, 0x04, 0x20, vel_lsb, vel_msb]
-    packet = get_packet(bytes)
-    return packet
-
-def get_position_and_velocity_packet(id, angle, velocity):
-    """
-    Get a packet to set the position of a servo at a specified velocity. 
-    
-    An action packet must be sent to actually move the servo.
-    
-    :param id: The id of the servo. 
-    :param angle: The angle to which to move the servo. 
-    :param velocity: The velocity at which to move the servo. 
-    :returns: A packet, in the form of a list of bytes. 
-    
-    """
-    
-    angle_msb = (angle >> 8) & 0xFF
-    angle_lsb = angle & 0xFF
-    
-    vel_msb = (velocity >> 8) & 0xFF
-    vel_lsb = velocity & 0xFF
-    
-    bytes = [id, 0x05, 0x04, 0x20, angle_lsb, angle_msb, vel_lsb, vel_msb]
-    packet = get_packet(bytes)
-    return packet
-
-def get_led_packet(id, value):
-    """
-    Get a packet to set the LED state of a servo. 
-    
-    :param id: The id of the servo. 
-    :param value: The value for the LED register (0 is off, 1 is on).
-    :returns: A packet, in the form of a list of bytes. 
-    
-    """
-    
-    return get_write_packet_1b(id, 0x19, value)
-
-def get_action_packet():
-    """
-    Get a packet which is sent to all servos to cause the servos to
-    move to the specified position. 
-    
-    :returns: A packet, in the form of a list of bytes. 
-    
-    """
-    
-    bytes = [0xFE, 0x02, 0x05]
-    packet = get_packet(bytes)
-    return packet
-
-def get_write_packet_1b(id, register, data):
-    """Return a packet which will write two bytes to a register.
-    
-    :param id: The identifier of the servo to address. 
-    :param register: The address of the register to write.
-    :param data: The data to write.
-    :returns: A command packet in the form of a list of bytes. 
-    
-    """
-    
-    bytes = [id, 0x03 + 1, 0x03, register] + [data]
-    packet = get_packet(bytes)
-    return packet
-
-
-def get_write_packet_2b(id, register, data):
-    """Return a packet which will write two bytes to a register.
-    
-    :param id: The identifier of the servo to address. 
-    :param register: The address of the register to write.
-    :param data: The data to write.
-    :returns: A command packet in the form of a list of bytes. 
-    
-    """
-    
-    msb = (data >> 8) & 0xFF
-    lsb = data & 0xFF
-    
-    bytes = [id, 0x03 + 2, 0x03, register] + [lsb, msb]
-    packet = get_packet(bytes)
-    return packet
-
-def get_read_packet(id, register, num_bytes = 2):
-    """Return a read register packet. 
-    
-    :param id: The identifier of the servo to address.
-    :param register: The address of the register to read. 
-    :param num_bytes: The number of bytes to read. (The default is 2.)
-    :returns: A command packet in the form of a list of bytes.
-    
-    """
-    bytes = [id, 0x02 + num_bytes, 0x02, register, num_bytes]
-    packet = get_packet(bytes)
-    return packet
 
 ### Send Data and Read Response Functions
 
@@ -366,10 +286,9 @@ def get_response(ser):
     
     """
     
-    id = None
     data = []
     
-    sum = 0
+    byte_sum = 0
     
     last_byte = None
     while True:
@@ -384,20 +303,20 @@ def get_response(ser):
     id_str = ser.read()
     if id_str == '':
         raise Exception('Unable to read response id.')
-    id = struct.unpack('B', id_str)[0]
-    sum += id
+    servo_id = struct.unpack('B', id_str)[0]
+    byte_sum += servo_id
     
     length_str = ser.read()
     if length_str == '':
         raise Exception('Unable to read length.')
     length = struct.unpack('B', length_str)[0]
-    sum += length
+    byte_sum += length
     
     error_str = ser.read()
     if error_str == '':
         raise Exception('Unable to read error.')
     error = struct.unpack('B', error_str)[0]
-    sum += error
+    byte_sum += error
     
     data = None
     
@@ -409,9 +328,9 @@ def get_response(ser):
         for d in data_str:
             b = struct.unpack('B', d)[0]
             data.append(b)
-            sum += b
+            byte_sum += b
     
-    calc_checksum = (~sum) & 0xFF
+    calc_checksum = (~byte_sum) & 0xFF
     
     checksum_str = ser.read()
     if checksum_str == None:
@@ -421,7 +340,7 @@ def get_response(ser):
     if checksum != calc_checksum:
         raise Exception('Checksum mismatch ({0} vs {1}).'.format(checksum, calc_checksum))
     
-    return Response(id, error, data, calc_checksum == checksum)
+    return Response(servo_id, error, data, calc_checksum == checksum)
     
 
 def write_and_get_response_multiple(ser, packet, servo_id = None, verbose = VERBOSE, attempts = NUM_ERROR_ATTEMPTS):
@@ -438,13 +357,13 @@ def write_and_get_response_multiple(ser, packet, servo_id = None, verbose = VERB
     :param verbose: If True, status information will be printed. (Default: ``VERBOSE``).
     :param attempts: The number of attempts to make to send the packet when an error is encountered. (Default: ``NUM_ERROR_ATTEMPTS``.)
         
-    :raises: An ``Exception`` if no packet is successfully read after ``attempts`` attempts.
+    :raises: An ``Exception`` if no packet is successfully read after ``attempts`` attempts, or
+    a ``DynamixelFatalError`` if another error occurs.
     
     :returns: A ``Response`` object.
     
     """
-    
-    
+
     for i in range(attempts):
         try:
             flush_serial(ser)
@@ -471,41 +390,130 @@ def write_and_get_response_multiple(ser, packet, servo_id = None, verbose = VERB
             
     raise Exception('Unable to read response for servo {0}'.format(servo_id))
    
-LED_ON = 1
-LED_OFF = 0
-   
 def set_led(ser, servo_id, value, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
-    packet = get_led_packet(servo_id, value)
+    """
+    Set the LED (to either LED_ON or LED_OFF).
+    
+    :param ser: The ``serial`` object to use. 
+    :param servo_id: The id of the servo.
+    :param value: The LED value to set (either LED_ON or LED_OFF).
+    :param verbose: If True, status information will be printed. (Default: ``VERBOSE``).
+    :param attempts: The number of attempts to make to send the packet when an error is encountered. (Default: ``NUM_ERROR_ATTEMPTS``.)
+        
+    :raises: An ``Exception`` if no packet is successfully read after ``attempts`` attempts.
+    """
+    
+    packet = packets.get_write_led_packet(servo_id, value)
     write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
    
 def get_torque(ser, servo_id, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
-    torque_packet = get_read_packet(servo_id, 0x28, 2)
+    """
+    Read the current torque as reported by a servo.
+    
+    :param ser: The ``serial`` object to use. 
+    :param servo_id: The id of the servo.
+    :param verbose: If True, status information will be printed. (Default: ``VERBOSE``).
+    :param attempts: The number of attempts to make to send the packet when an error is encountered. (Default: ``NUM_ERROR_ATTEMPTS``.)
+        
+    :raises: An ``Exception`` if no packet is successfully read after ``attempts`` attempts.
+    
+    :returns: An integer indicating the reported torque.
+    """
+    
+    torque_packet = packets.get_read_torque_packet(servo_id)
     resp = write_and_get_response_multiple(ser, torque_packet, servo_id, verbose, num_error_attempts)
     return resp.data[1] * 256 + resp.data[0]
 
 def get_position(ser, servo_id, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
-    packet = get_read_packet(servo_id, 0x24, 2)
+    """
+    Read the current position as reported by a servo.
+    
+    :param ser: The ``serial`` object to use. 
+    :param servo_id: The id of the servo.
+    :param verbose: If True, status information will be printed. (Default: ``VERBOSE``).
+    :param attempts: The number of attempts to make to send the packet when an error is encountered. (Default: ``NUM_ERROR_ATTEMPTS``.)
+        
+    :raises: An ``Exception`` if no packet is successfully read after ``attempts`` attempts.
+    
+    :returns: An integer indicating the reported position.
+    """
+    
+    packet = packets.get_read_position_packet(servo_id)
     resp = write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
     return resp.data[1] * 256 + resp.data[0]
 
 def set_position(ser, servo_id, position, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
-    packet = get_write_packet_2b(servo_id, 0x1E, position)
+    """
+    Set the taget position of a servo (the servo will not move until an action packet is sent).
+    
+    :param ser: The ``serial`` object to use. 
+    :param servo_id: The id of the servo.
+    :param position: The position to set, (0, 1023). 
+    :param verbose: If True, status information will be printed. (Default: ``VERBOSE``).
+    :param attempts: The number of attempts to make to send the packet when an error is encountered. (Default: ``NUM_ERROR_ATTEMPTS``.)
+        
+    :raises: An ``Exception`` if no packet is successfully read after ``attempts`` attempts.
+    """
+    
+    packet = packets.get_write_position_packet(servo_id, position)
     write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
 
 def set_velocity(ser, servo_id, velocity, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
-    packet = get_write_packet_2b(servo_id, 0x20, velocity)
+    """
+    Set the taget velocity of a servo (the servo will not move until an action packet is sent).
+    
+    :param ser: The ``serial`` object to use. 
+    :param servo_id: The id of the servo.
+    :param position: The velocity to set, (0, 1023). 
+    :param verbose: If True, status information will be printed. (Default: ``VERBOSE``).
+    :param attempts: The number of attempts to make to send the packet when an error is encountered. (Default: ``NUM_ERROR_ATTEMPTS``.)
+        
+    :raises: An ``Exception`` if no packet is successfully read after ``attempts`` attempts.
+    """
+    
+    packet = packets.get_write_velocity_packet(servo_id, velocity)
     write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
 
 def init(ser, servo_id, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
+    """
+    "Initialize" a servo by reading its current position and then writing that position.
+    
+    :param ser: The ``serial`` object to use. 
+    :param servo_id: The id of the servo.
+    :param verbose: If True, status information will be printed. (Default: ``VERBOSE``).
+    :param attempts: The number of attempts to make to send the packet when an error is encountered. (Default: ``NUM_ERROR_ATTEMPTS``.)
+        
+    :raises: An ``Exception`` if no packet is successfully read after ``attempts`` attempts.
+    
+    """
+    
     position = get_position(ser, servo_id, verbose, num_error_attempts)
     set_position(ser, servo_id, position, verbose, num_error_attempts)
-    ser.write(get_action_packet())
+    ser.write(packets.get_action_packet())
     
 def send_action_packet(ser):
-    ser.write(get_action_packet())
+    """
+    Send an action packet, which causes all servos to move to their previously-specified
+    target positions.
+    
+    :param ser: The ``serial`` object to use. 
+        
+    :raises: An ``Exception`` if no packet is successfully read after ``attempts`` attempts.
+    
+    """
+    ser.write(packets.get_action_packet())
 
 def get_is_moving(ser, servo_id, verbose = VERBOSE, num_error_attempts = NUM_ERROR_ATTEMPTS):
-    packet = get_read_packet(servo_id, 0x2E, 2)
+    """
+    Returns a boolean value indicating whether the servo is currently moving.
+    
+    :param ser: The ``serial`` object to use. 
+    :param servo_id: The id of the servo.
+    :param verbose: If True, status information will be printed. (Default: ``VERBOSE``).
+    :param attempts: The number of attempts to make to send the packet when an error is encountered. (Default: ``NUM_ERROR_ATTEMPTS``.)
+        
+    """
+    packet = packets.get_read_is_moving_packet(servo_id)
     resp = write_and_get_response_multiple(ser, packet, servo_id, verbose, num_error_attempts)
     return resp.data[0] != 0
     
