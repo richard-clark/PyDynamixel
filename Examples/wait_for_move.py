@@ -5,7 +5,7 @@ printing a "Done moving!" message.
 
 """
 
-from pydynamixel import dynamixel
+from pydynamixel import dynamixel, registers
 import time
 
 # You'll need to change this to the serial port of your USB2Dynamixel
@@ -26,7 +26,7 @@ try:
     ser = dynamixel.get_serial_for_url(serial_port)
     
     # Turn the LED off
-    dynamixel.set_led(ser, servo_id, dynamixel.LED_OFF)
+    dynamixel.set_led(ser, servo_id, registers.LED_STATE.OFF)
     
     if first_move == True:
         dynamixel.init(ser, servo_id)
@@ -53,7 +53,7 @@ try:
     # Done moving
     print('Done moving!')
     
-    dynamixel.set_led(ser, servo_id, dynamixel.LED_ON)
+    dynamixel.set_led(ser, servo_id, registers.LED_STATE.ON)
     
 except Exception as e:
     print('ERROR!')
