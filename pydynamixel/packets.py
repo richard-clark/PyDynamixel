@@ -36,7 +36,7 @@ def get_packet(bytes_in):
         checksum += b
     
     checksum = (~checksum) & 0xFF
-    bytes.append(checksum)
+    packet_bytes.append(checksum)
     
     return packet_bytes
 
@@ -135,7 +135,7 @@ def get_read_packet(servo_id, register, num_bytes = 2):
     :returns: A command packet in the form of a list of bytes.
     
     """
-    packet_bytes = [id, 0x02 + num_bytes, 0x02, register, num_bytes]
+    packet_bytes = [servo_id, 0x02 + num_bytes, 0x02, register, num_bytes]
     packet = get_packet(packet_bytes)
     return packet
 
